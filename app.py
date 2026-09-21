@@ -86,6 +86,6 @@ else:
             effective = s_rate['effective_date'].replace('-', '.') + '~' if s_rate else '-'
             st.markdown(f'''<div class="rate-card"><div class="brand">{html.escape(event['brand_name'])}</div><div style="font-size:2rem;font-weight:800;color:#18233c">{rate_text}</div><div class="meta">REF NO.　{html.escape(event['ref_no'])}<br>AGING　{html.escape(event['aging'])}<br>适用日期　{effective}</div></div>''', unsafe_allow_html=True)
         if len(matched) > 50:
-            st.caption("前50项만 표시합니다. REF NO. 또는 AGING을 입력해 범위를 좁혀 주세요.")
+            st.caption("仅显示前50项。请输入 REF NO. 或 AGING 缩小范围。")
     else:
         st.caption("选择品牌，或输入 REF NO. / AGING 查询。")
