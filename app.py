@@ -1,6 +1,6 @@
 import html
 import streamlit as st
-from database import load_data, load_master
+from database import load_data, load_master, load_s_events
 from search_engine import normalize
 from rate_engine import current_rate, general_for_category, format_rate
 
@@ -11,6 +11,7 @@ st.caption("品牌点数查询")
 try:
     brands, general, meta = load_data()
     master = load_master()
+    s_events = load_s_events()
 except Exception:
     st.error("目前没有可查询的数据。")
     st.stop()
@@ -62,3 +63,29 @@ if kind:
         esc = html.escape
         note_html = f'<div class="note">⚠ 备注<br>{esc(note)}</div>' if note else ''
         st.markdown(f'''<div class="rate-card"><div class="brand">{esc(name)}</div><div class="big-rate">{format_rate(result['rate'])}</div><strong>{kind}</strong><div class="meta">分类　{esc(category)}<br>支付方式　{esc(payment)}<br>适用日期　{result['effective_date'].replace('-', '.')}~</div>{note_html}</div>''', unsafe_allow_html=True)
+
+st.divider()
+st.subheader("S活动查询")
+if not s_events:
+    st.info("目前尚未导入S活动数据。请使用管理员程序重新导入含③S活动的Excel。")
+else:
+    s_brands = sorted({event['brand_name'] for event in s_events}, key=normalize)
+    s_brand = st.selectbox("S活动品牌", s_brands, index=None, placeholder="输入品牌名称，例如 AMI")
+    s_query = st.text_input("REF NO. / AGING 搜索", placeholder="输入型号或AGING，可单独搜索")
+    if s_brand or s_query.strip():
+        q = normalize(s_query)
+        matched = [event for event in s_events
+                   if (not s_brand or event['brand_name'] == s_brand)
+                   and (not q or any(q in normalize(event[key]) for key in ('brand_name', 'aging', 'ref_no')))]
+        st.caption(f"符合条件：{len(matched)}项")
+        if not matched:
+            st.info("没有符合条件的S活动项目。")
+        for event in matched[:50]:
+            s_rate = current_rate(event['rates'])
+            rate_text = format_rate(s_rate['rate']) if s_rate else "暂无适用点数"
+            effective = s_rate['effective_date'].replace('-', '.') + '~' if s_rate else '-'
+            st.markdown(f'''<div class="rate-card"><div class="brand">{html.escape(event['brand_name'])}</div><div style="font-size:2rem;font-weight:800;color:#18233c">{rate_text}</div><div class="meta">REF NO.　{html.escape(event['ref_no'])}<br>AGING　{html.escape(event['aging'])}<br>适用日期　{effective}</div></div>''', unsafe_allow_html=True)
+        if len(matched) > 50:
+            st.caption("前50项만 표시합니다. REF NO. 또는 AGING을 입력해 범위를 좁혀 주세요.")
+    else:
+        st.caption("选择品牌，或输入 REF NO. / AGING 查询。")

@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+.streamlit/secrets.toml
+data/sg_rate.db*
+data/source/*
+data/backups/*
+*.xlsx
+*.xlsm

@@ -11,6 +11,8 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS general_rates(id INTEGER PRIMARY KEY, category TEXT NOT NULL, payment_method TEXT, rate REAL NOT NULL, effective_date TEXT NOT NULL, source_file TEXT, updated_at TEXT);
 CREATE TABLE IF NOT EXISTS brands(id INTEGER PRIMARY KEY, brand_name TEXT NOT NULL, normalized_name TEXT NOT NULL, category TEXT, payment_method TEXT, note TEXT);
 CREATE TABLE IF NOT EXISTS brand_rates(id INTEGER PRIMARY KEY, brand_id INTEGER NOT NULL REFERENCES brands(id), rate REAL NOT NULL, effective_date TEXT NOT NULL, source_file TEXT);
+CREATE TABLE IF NOT EXISTS s_events(id INTEGER PRIMARY KEY, brand_name TEXT NOT NULL, aging TEXT, ref_no TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS s_event_rates(id INTEGER PRIMARY KEY, event_id INTEGER NOT NULL REFERENCES s_events(id), rate REAL NOT NULL, effective_date TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS app_meta(key TEXT PRIMARY KEY, value TEXT);
 CREATE INDEX IF NOT EXISTS idx_brands_name ON brands(normalized_name);
 """
@@ -35,10 +37,16 @@ def replace_data(parsed, filename, path=DB_PATH):
         for r in b['rates']:
             if not isinstance(r['rate'], (int, float)):
                 raise ValueError('Invalid brand rate')
+    for event in parsed.s_events:
+        for r in event['rates']:
+            if not isinstance(r['rate'], (int, float)):
+                raise ValueError('Invalid S event rate')
     db = connect(path)
     now = datetime.now().isoformat(timespec="seconds")
     try:
         with db:
+            db.execute("DELETE FROM s_event_rates")
+            db.execute("DELETE FROM s_events")
             db.execute("DELETE FROM brand_rates")
             db.execute("DELETE FROM brands")
             db.execute("DELETE FROM general_rates")
@@ -50,6 +58,11 @@ def replace_data(parsed, filename, path=DB_PATH):
                                  (b['brand_name'], normalize(b['brand_name']), b['category'], b['payment_method'], b['note']))
                 db.executemany("INSERT INTO brand_rates(brand_id,rate,effective_date,source_file) VALUES (?,?,?,?)",
                                [(cur.lastrowid, r['rate'], r['effective_date'], filename) for r in b['rates']])
+            for event in parsed.s_events:
+                cur = db.execute("INSERT INTO s_events(brand_name,aging,ref_no) VALUES (?,?,?)",
+                                 (event['brand_name'], event['aging'], event['ref_no']))
+                db.executemany("INSERT INTO s_event_rates(event_id,rate,effective_date) VALUES (?,?,?)",
+                               [(cur.lastrowid, r['rate'], r['effective_date']) for r in event['rates']])
             db.executemany("INSERT INTO app_meta(key,value) VALUES (?,?)", [
                 ('last_update', now[:10]), ('source_filename', filename),
                 ('source_month', parsed.source_month), ('latest_effective_date', parsed.latest_effective_date)])
@@ -75,6 +88,24 @@ def load_data(path=DB_PATH):
             if r['brand_id'] in by_id:
                 by_id[r['brand_id']]['rates'].append(r)
         return brands, general, meta
+    finally:
+        db.close()
+
+
+def load_s_events(path=DB_PATH):
+    if Path(path) == DB_PATH and not DB_PATH.exists() and PUBLISHED_PATH.exists():
+        with open(PUBLISHED_PATH, encoding='utf-8') as f:
+            return json.load(f).get('s_events', [])
+    db = connect(path)
+    try:
+        events = [dict(x) for x in db.execute('SELECT * FROM s_events')]
+        by_id = {event['id']: event for event in events}
+        for event in events:
+            event['rates'] = []
+        for rate in db.execute('SELECT * FROM s_event_rates'):
+            if rate['event_id'] in by_id:
+                by_id[rate['event_id']]['rates'].append(dict(rate=rate['rate'], effective_date=rate['effective_date']))
+        return events
     finally:
         db.close()
 
