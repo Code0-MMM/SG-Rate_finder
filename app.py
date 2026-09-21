@@ -1,6 +1,18 @@
 import html
 import streamlit as st
-from database import load_data, load_master, load_s_events
+from database import load_data, load_master
+try:
+    from database import load_s_events
+except ImportError:
+    # A cloud deployment can briefly load new app.py with an older database.py.
+    import json
+    from config import PUBLISHED_PATH
+
+    def load_s_events():
+        if not PUBLISHED_PATH.exists():
+            return []
+        with open(PUBLISHED_PATH, encoding="utf-8") as snapshot:
+            return json.load(snapshot).get("s_events", [])
 from search_engine import normalize
 from rate_engine import current_rate, general_for_category, format_rate
 
